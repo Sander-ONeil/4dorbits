@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head> 
+    <title>Live Plot with Sliders</title>
+    <style>
+
+        .canvas-container {
+            display: flex;
+        }
+        
+        .canvas-container canvas {
+            border: 1px solid black;
+        }
+        .slider-container {
+            display: flex;
+            flex-direction: column; /* Stack sliders vertically */
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+            text-align: center;
+            color: black;
+        }
+        input[type="range"] {
+            width: 300px; /* Set the width of the slider */
+            height: 20px; /* Set the height of the slider */
+            margin: 10px; /* Add some margin for spacing */
+            color: black;
+        }
+        
+    </style>
+</head>
+<body>
+        <div class="canvas-container">
+            <canvas id="plotCanvas" width="600" height="600"></canvas>
+            <canvas id="plotCanvasyz" width="600" height="600"></canvas>
+        </div>
+        
+        <!-- Sliders for adjusting parameters -->
+        <div class="slider-container">
+            <div>
+                <label for="slider1">Length of Simulation:</label>
+                <input type="range" id="slider1" min="2" max="30" step="0.01" value="2">
+            </div>
+            <div>
+                <label for="slider3">Moon Speed:</label>
+                <input type="range" id="slider3" min="0" max="30" step="0.01" value="1">
+            </div>
+            <div>
+                <label for="slider4">Moon Distance:</label>
+                <input type="range" id="slider4" min="0" max="1" step="0.0001" value="1">
+            </div>
+            <div>
+                <label for="slider2">Time:</label>
+                <input type="range" id="slider2" min="0" max="1" step="0.00001" value="1">
+            </div>
+        </div>
+
+</body>
+
+    <script>
+        var canvas = document.getElementById('plotCanvas');
+        var ctx = canvas.getContext('2d');
+        var canvas = document.getElementById('plotCanvasyz');
+        var ctx2 = canvas.getContext('2d');
+        
+        var N = 10000;
+
+        class Planet {
+            constructor(mass = 1, x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0) {
+                this.mass = mass;
+                this.p = [x, y, z];
+                this.v = [vx, vy, vz];
+                this.X = Array(N).fill(0);
+                this.Y = Array(N).fill(0);
+                this.Z = Array(N).fill(0);
+                this.max = 0;
+            }
+
+            update(t) {
+                for (var i = 0; i < 3; i++) {
+                    this.p[i] += this.v[i] * dt;
+                    this.max = Math.max(Math.abs(this.p[i]),this.max)
+                }
+                this.X[t] = this.p[0];
+                this.Y[t] = this.p[1];
+                this.Z[t] = this.p[2];
+            }
+
+            grav(other_planet) {
+                var d_squared = 0;
+                var dif = [0, 0, 0];
+                for (var i = 0; i < 3; i++) {
+                    var di = other_planet.p[i] - this.p[i];
+                    dif[i] = di;
+                    d_squared += di * di;
+                }
+                var d = Math.sqrt(d_squared);
+
+                for (var i = 0; i < 3; i++) {
+                    this.v[i] += dif[i] * dt / (d * d * d) * ( other_planet.mass);
+                }
+            }
+        }
+
+        class System {
+            constructor() {
+                this.planets = [];
+            }
+
+            add_planet(planet) {
+                this.planets.push(planet);
+            }
+
+            grav_all(t) {
+                for (var i = 0; i < this.planets.length; i += 1) {
+                    var p = this.planets[i];
+
+                    for (var j = 0; j < this.planets.length; j += 1) {
+                        var other_p = this.planets[j];
+
+                        if (i != j) {
+                            p.grav(other_p);
+                        }
+                    }
+                }
+                for (var i = 0; i < this.planets.length; i += 1) {
+                    var p = this.planets[i];
+                    p.update(t);
+                }
+            }
+
+            bound() {
+                var lx = 2 ^ 15;
+                var hx = -2 ^ 15;
+                var high = 0;
+                for (var i = 0; i < this.planets.length; i += 1) {
+                    var p = this.planets[i];
+                    high = Math.max(p.max, high);
+                    
+                }
+                return high;
+            }
+
+            get_traces() {
+                var traces = [];
+                for (var i = 0; i < this.planets.length; i += 1) {
+                    var p = this.planets[i];
+                    traces.push([p.X, p.Y,p.Z, p.mass]);
+                }
+                return traces;
+            }
+
+            zero_net_velocity(){
+                var v = [0,0,0]
+                var mass = 0
+                for (var i = 0; i < this.planets.length; i += 1) {
+                    var p = this.planets[i];
+                    mass += p.mass
+                    for (var j = 0; j < 3; j++) {
+                        
+                        v[j] += p.v[j] * p.mass
+                    }
+                }
+                for (var j = 0; j < 3; j++) 
+                {
+                    v[j] /= mass
+                }
+                
+                for (var i = 0; i < this.planets.length; i += 1) {
+                    
+                    for (var j = 0; j < 3; j++) {
+                        this.planets[i].v[j] -= v[j]
+                    }
+
+                }
+
+            }
+        }
+        var dt = 0.0001;
+        var sol;
+        function updatePlot() {
+            // Clear canvas
+            
+            
+            // Get slider values
+            var param1 = parseFloat(document.getElementById("slider1").value);
+            var param3 = parseFloat(document.getElementById("slider3").value);
+            var moon_dist = parseFloat(document.getElementById("slider4").value);
+            N =Math.floor(1000+1000*param1)
+            var plan = new Planet(1, 1, 0, 0, 0, 3, 0);
+            var sun = new Planet(10, 0, 0, 0, 0, 0, 0);
+            var moon = new Planet(.1, 1.0, 0,moon_dist, 0, 3+ param3/10, 0);
+            sol = new System();
+            sol.add_planet(plan);
+            sol.add_planet(sun);
+            sol.add_planet(moon);
+            
+            sol.zero_net_velocity();
+            // Generate data for the plot
+            for (var t = 0; t <= N; t += 1) {
+                sol.grav_all(t);
+            }
+
+            var max = sol.bound();
+
+            update_canvas_only()
+            
+        }
+        function update_canvas_only() {
+            // Clear canvas
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            var param2 = parseFloat(document.getElementById("slider2").value);
+            
+            var max = sol.bound();
+
+            // Plot the graph
+            var traces = sol.get_traces();
+            ctx.strokeStyle = 'blue'; // Set line color
+           // ctx.beginPath();
+           
+            for (var i = 0; i < traces.length; i++) {
+                ctx.strokeStyle = `rgb(
+                0
+                ${Math.floor(255 - 42.5 * i)}
+                ${Math.floor(0 + 120.5 * i)})`;
+                ctx.fillStyle = `rgb(
+                255
+                ${Math.floor(255 - 42.5 * i)}
+                ${Math.floor(0 + 120.5 * i)})`;
+                ctx.beginPath();
+                
+                
+                var trace = traces[i];
+                ctx.lineWidth = (trace[3]^(1/10))+1
+               
+                
+                for (var j = 0; j < N; j++) {
+                    var x = (trace[0][j] + max) / (2 * max) * canvas.width;
+                    var y = (trace[1][j] + max) / (2 * max) * canvas.height;
+                    if (j === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+
+                ctx.stroke();
+                var n = Math.floor(N*param2)
+                var x = (trace[0][n] + max) / (2 * max) * canvas.width
+                var y = (trace[1][n]+ max) / (2 * max) * canvas.height
+                ctx.fillRect( x-1 ,y-10 , 2 ,20);
+                ctx.fillRect( x-10 ,y-1 , 20 ,2);
+                
+            }
+
+            ctx2.clearRect(0, 0, canvas.width, canvas.height);
+            for (var i = 0; i < traces.length; i++) {
+                ctx2.strokeStyle = `rgb(
+                0
+                ${Math.floor(255 - 42.5 * i)}
+                ${Math.floor(0 + 120.5 * i)})`;
+                ctx2.fillStyle = `rgb(
+                255
+                ${Math.floor(255 - 42.5 * i)}
+                ${Math.floor(0 + 120.5 * i)})`;
+                ctx2.beginPath();
+                
+                
+                var trace = traces[i];
+                ctx2.lineWidth = (trace[3]^(1/10))+1
+               
+                
+                for (var j = 0; j < N; j++) {
+                    var x = (trace[0][j] + max) / (2 * max) * canvas.width;
+                    var y = (trace[2][j] + max) / (2 * max) * canvas.height;
+                    if (j === 0) {
+                        ctx2.moveTo(x, y);
+                    } else {
+                        ctx2.lineTo(x, y);
+                    }
+                }
+
+                ctx2.stroke();
+                var n = Math.floor(N*param2)
+                var x = (trace[0][n] + max) / (2 * max) * canvas.width
+                var y = (trace[2][n]+ max) / (2 * max) * canvas.height
+                ctx2.fillRect( x-1 ,y-10 , 2 ,20);
+                ctx2.fillRect( x-10 ,y-1 , 20 ,2);
+                
+            }
+            
+        }
+
+        // Add event listeners to sliders
+        document.getElementById("slider1").addEventListener("input", updatePlot);
+        document.getElementById("slider3").addEventListener("input", updatePlot);
+        document.getElementById("slider4").addEventListener("input", updatePlot);
+        document.getElementById("slider2").addEventListener("input", update_canvas_only);
+
+        // Initialize the plot
+        updatePlot();
+    </script>
+</body>
+</html>
