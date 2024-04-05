@@ -60,8 +60,8 @@
     <script>
         var canvas = document.getElementById('plotCanvas');
         var ctx = canvas.getContext('2d');
-        var canvas = document.getElementById('plotCanvasyz');
-        var ctx2 = canvas.getContext('2d');
+        var canvasyz = document.getElementById('plotCanvasyz');
+        var ctx2 = canvasyz.getContext('2d');
         
         var N = 10000;
 
@@ -69,7 +69,10 @@
             constructor(mass = 1, x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0) {
                 this.mass = mass;
                 this.p = [x, y, z];
+                this.initial_p = [x, y, z];
+
                 this.v = [vx, vy, vz];
+                this.initial_v = [vx, vy, vz];
                 this.X = Array(N).fill(0);
                 this.Y = Array(N).fill(0);
                 this.Z = Array(N).fill(0);
@@ -97,7 +100,17 @@
                 var d = Math.sqrt(d_squared);
 
                 for (var i = 0; i < 3; i++) {
-                    this.v[i] += dif[i] * dt / (d * d * d) * ( other_planet.mass);
+                    this.v[i] += dif[i] * dt / (d * d * d* d) * ( other_planet.mass);
+                }
+            }
+            reset(){
+                this.X = Array(N).fill(0);
+                this.Y = Array(N).fill(0);
+                this.Z = Array(N).fill(0);
+                this.max = 0;
+                for (var i = 0; i < 3; i++) {
+                this.p[i] =  this.initial_p[i];
+                this.v[i] =  this.initial_v[i];
                 }
             }
         }
@@ -175,9 +188,15 @@
                 }
 
             }
+            reset_planets(){
+                for (var i = 0; i < this.planets.length; i += 1) {
+                    var p = this.planets[i];
+                    p.reset()}
+            }
         }
         var dt = 0.0001;
         var sol;
+        var max = 1;
         function updatePlot() {
             // Clear canvas
             
@@ -201,7 +220,22 @@
                 sol.grav_all(t);
             }
 
-            var max = sol.bound();
+            max = sol.bound();
+
+            update_canvas_only()
+            
+        }
+        function updatePlot_keep_planets() {
+            sol.reset_planets();
+            var param1 = parseFloat(document.getElementById("slider1").value);
+            N =Math.floor(1000+1000*param1)
+            sol.zero_net_velocity();
+            // Generate data for the plot
+            for (var t = 0; t <= N; t += 1) {
+                sol.grav_all(t);
+            }
+
+            max = sol.bound();
 
             update_canvas_only()
             
@@ -294,13 +328,62 @@
         }
 
         // Add event listeners to sliders
-        document.getElementById("slider1").addEventListener("input", updatePlot);
+        document.getElementById("slider1").addEventListener("input", updatePlot_keep_planets);
         document.getElementById("slider3").addEventListener("input", updatePlot);
         document.getElementById("slider4").addEventListener("input", updatePlot);
         document.getElementById("slider2").addEventListener("input", update_canvas_only);
 
         // Initialize the plot
         updatePlot();
+
+
+        var isMouseDown = false;
+
+        // Function to get mouse position relative to canvas
+        function getMousePos(canvas, event) {
+            var rect = canvas.getBoundingClientRect();
+            return {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
+            };
+        }
+
+        // Event listener for mouse down
+        var mouse_start = [0,0]
+        var mouse_mass = 0
+
+        canvas.addEventListener('mousedown', function(event) {
+            isMouseDown = true;
+            var mousePos = getMousePos(canvas, event);
+            mouse_start = [mousePos.x,mousePos.y];
+            mass = 0
+            console.log('Mouse down at:', mousePos.x, ',', mousePos.y);
+        });
+
+        function scale(x ){
+            //+max / (2 * max) * canvas.width
+            return x / canvas.width *(2 * max) - max
+
+        }
+        // Event listener for mouse up
+        canvas.addEventListener('mouseup', function(event) {
+            isMouseDown = false;
+            var mousePos = getMousePos(canvas, event);
+            
+
+            sol.add_planet(new Planet(mouse_mass/10, scale(mousePos.x),scale(mousePos.y),0,(mouse_start[0]-mousePos.x)/10,( mouse_start[1]-mousePos.y)/10,0))
+            updatePlot_keep_planets()
+            console.log('Mouse up at:', mousePos.x, ',', mousePos.y);
+        });
+
+        // Event listener for mouse move
+        canvas.addEventListener('mousemove', function(event) {
+            if (isMouseDown) {
+                var mousePos = getMousePos(canvas, event);
+                console.log('Mouse dragged to:', mousePos.x, ',', mousePos.y);
+                mouse_mass +=1;
+            }
+        });
     </script>
 </body>
 </html>
